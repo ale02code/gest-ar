@@ -5,7 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 
 function CocaColaModel({ position }) {
-  const { scene } = useGLTF("/models/cocacola.glb"); // Modelo en public/
+  const { scene } = useGLTF("/models/figure.glb"); // Modelo en public/
   return <primitive object={scene} scale={0.2} position={position} />;
 }
 
@@ -17,7 +17,8 @@ export default function App() {
     if (!videoRef.current) return;
 
     const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
     hands.setOptions({
@@ -32,7 +33,7 @@ export default function App() {
         const landmarks = results.multiHandLandmarks[0];
 
         // Landmark 0 = "wrist" y 9 = "center of palm approx"
-        const palm = landmarks[9]; 
+        const palm = landmarks[9];
         setPalmPos([
           (palm.x - 0.5) * 2, // normalizado a espacio 3D
           (0.5 - palm.y) * 2,
