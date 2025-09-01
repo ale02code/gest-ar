@@ -1,7 +1,9 @@
+import Video from '../src/components/Cam.jsx';
+
 function App() {
   return (
     <>
-      <p>Mónica</p>
+      <Video />
     </>
   );
 }
