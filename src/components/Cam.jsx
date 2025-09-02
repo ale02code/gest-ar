@@ -2,12 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import * as THREE from "three";
 
-// 👉 Componente para cargar el modelo
-function Modelo({ position }) {
-  const { scene } = useGLTF("/figure.glb"); // asegúrate de que esté en public/figure.glb
-  return <primitive object={scene} scale={0.3} position={position} />;
+function Model({ position }) {
+  const modelRef = useRef();
+
+  useEffect(() => {
+    const loader = new GLTFLoader();
+    loader.load("/figure.glb", (gltf) => {
+      modelRef.current.add(gltf.scene);
+    });
+  }, []);
+
+  return <group ref={modelRef} position={position} scale={[0.5, 0.5, 0.5]} />;
 }
 
 export default function Cam() {
@@ -25,7 +34,7 @@ export default function Cam() {
 
     hands.setOptions({
       maxNumHands: 1,
-      modelComplexity: 0,
+      modelComplexity: 1,
       minDetectionConfidence: 0.7,
       minTrackingConfidence: 0.7,
     });
@@ -38,13 +47,16 @@ export default function Cam() {
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const wrist = results.multiHandLandmarks[0][0]; // Landmark de la muñeca
-        const x = wrist.x * canvas.width;
-        const y = wrist.y * canvas.height;
+        const landmarks = results.multiHandLandmarks[0];
+        const palm = landmarks[9]; // centro de la palma
 
-        setHandPosition([ (x / canvas.width - 0.5) * 2, -(y / canvas.height - 0.5) * 2, 0 ]);
+        // convertir coords a espacio -1..1 para la escena 3D
+        const x = (palm.x - 0.5) * 2;
+        const y = -(palm.y - 0.5) * 2;
+
+        setHandPosition([x, y, -2]); // -2 para que quede frente a la cámara 3D
       } else {
-        setHandPosition(null); // si no hay mano → no mostrar modelo
+        setHandPosition(null); // no hay mano → ocultar
       }
     });
 
@@ -52,8 +64,8 @@ export default function Cam() {
       onFrame: async () => {
         await hands.send({ image: videoRef.current });
       },
-      width: 320,
-      height: 240,
+      width: 640,
+      height: 480,
     });
     camera.start();
 
@@ -61,27 +73,20 @@ export default function Cam() {
   }, []);
 
   return (
-    <div className="relative flex justify-center items-center">
-      {/* Video oculto */}
+    <div className="flex flex-col items-center">
+      <h1>Detección de Mano con Figura 3D</h1>
       <video ref={videoRef} className="hidden" />
+      <canvas ref={canvasRef} width={640} height={480} />
 
-      {/* Canvas para la detección */}
-      <canvas
-        ref={canvasRef}
-        width={320}
-        height={240}
-        className="rounded-lg shadow-lg"
-      />
+      {/* Escena 3D */}
+      <Canvas style={{ width: 640, height: 480 }}>
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[2, 2, 5]} />
+        <OrbitControls />
 
-      {/* Overlay con modelo 3D */}
-      <div className="absolute top-0 left-0 w-[320px] h-[240px] pointer-events-none">
-        <Canvas camera={{ position: [0, 0, 3] }}>
-          <ambientLight intensity={0.8} />
-          <directionalLight position={[0, 1, 2]} />
-          <OrbitControls enableZoom={false} enableRotate={false} />
-          {handPosition && <Modelo position={handPosition} />}
-        </Canvas>
-      </div>
+        {/* Mostrar modelo solo si hay mano */}
+        {handPosition && <Model position={handPosition} />}
+      </Canvas>
     </div>
   );
 }
