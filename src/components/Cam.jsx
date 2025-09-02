@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 
@@ -8,98 +8,73 @@ export default function Cam() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const videoEl = videoRef.current;
-    const canvasEl = canvasRef.current;
-    if (!videoEl || !canvasEl) return; // a estas alturas, en useEffect, ya deben existir
+    if (!videoRef.current) return;
 
-    const ctx = canvasEl.getContext("2d");
-
-    // 1) Inicializar MediaPipe Hands
+    // Inicializar modelo de manos
     const hands = new Hands({
-      locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
     hands.setOptions({
-      selfieMode: true, // espejo: más natural
-      maxNumHands: 1,
-      modelComplexity: 1,
+      maxNumHands: 1,        // detectar 1 sola mano
+      modelComplexity: 0,    // más rápido, menos pesado
       minDetectionConfidence: 0.7,
       minTrackingConfidence: 0.7,
     });
 
-    // 2) Dibujo por frame
     hands.onResults((results) => {
-      const img = results.image;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
 
-      // Ajusta el canvas al tamaño real del frame
-      const w = img.width || 640;
-      const h = img.height || 480;
-      if (canvasEl.width !== w) canvasEl.width = w;
-      if (canvasEl.height !== h) canvasEl.height = h;
+      // limpiar canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      ctx.save();
-      ctx.clearRect(0, 0, w, h);
+      // dibujar video
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-      // Dibuja el video
-      ctx.drawImage(img, 0, 0, w, h);
-
-      // Dibuja landmarks
-      if (results.multiHandLandmarks?.length) {
-        for (const lm of results.multiHandLandmarks) {
-          for (const p of lm) {
+      // dibujar puntos de la mano
+      if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+          landmarks.forEach((point) => {
             ctx.beginPath();
-            ctx.arc(p.x * w, p.y * h, 4, 0, Math.PI * 2);
-            ctx.fillStyle = "#ff4d4f";
+            ctx.arc(point.x * canvas.width, point.y * canvas.height, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = "red";
             ctx.fill();
-          }
+          });
         }
       }
-      ctx.restore();
     });
 
-    // 3) Iniciar cámara
-    let cam;
-    (async () => {
-      try {
-        cam = new Camera(videoEl, {
-          onFrame: async () => {
-            await hands.send({ image: videoEl });
-          },
-          width: 640,
-          height: 480,
-        });
-        await cam.start();
-      } catch (e) {
-        console.error(e);
-        setError(e?.message || "No se pudo iniciar la cámara");
-      }
-    })();
+    let camera = null;
+    try {
+      camera = new Camera(videoRef.current, {
+        onFrame: async () => {
+          await hands.send({ image: videoRef.current });
+        },
+        width: 320,  // resolución más baja para mayor rapidez
+        height: 340,
+      });
+      camera.start();
+    } catch (err) {
+      setError("Error al iniciar la cámara");
+      console.error(err);
+    }
 
-    // 4) Cleanup
     return () => {
-      if (cam) cam.stop();
-      const stream = videoEl.srcObject;
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-      hands.close();
+      if (camera) camera.stop();
     };
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black relative">
-      {error && (
-        <p className="absolute top-3 left-3 text-red-400 bg-black/50 px-2 py-1 rounded">
-          {error}
-        </p>
-      )}
-
-      {/* ¡El video debe estar en el DOM! (puede ir oculto) */}
-      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
-
-      {/* Aquí ves el video + landmarks dibujados */}
+    <div className="flex flex-col items-center">
+      <h1 className="text-xl font-bold mb-2">Detección de mano</h1>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <video ref={videoRef} className="hidden" /> {/* ocultamos el video real */}
       <canvas
         ref={canvasRef}
-        className="max-w-full h-auto rounded-lg shadow-lg"
+        width={320}
+        height={240}
+        className="rounded-lg shadow-lg"
       />
     </div>
   );
