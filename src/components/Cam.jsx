@@ -1,44 +1,54 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF } from "@react-three/drei";
-
-function CocaColaModel({ position }) {
-  const { scene } = useGLTF("/models/figure.glb"); // Modelo en public/
-  return <primitive object={scene} scale={0.2} position={position} />;
-}
 
 export default function App() {
   const videoRef = useRef(null);
-  const [palmPos, setPalmPos] = useState([0, 0, 0]); // posición 3D de la palma
+  const canvasRef = useRef(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!videoRef.current) return;
 
+    // Inicializar modelo de manos
     const hands = new Hands({
       locateFile: (file) =>
         `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
     hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
+      maxNumHands: 1, // detectar 1 mano
+      modelComplexity: 1, // precisión
       minDetectionConfidence: 0.7,
       minTrackingConfidence: 0.7,
     });
 
     hands.onResults((results) => {
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
 
-        // Landmark 0 = "wrist" y 9 = "center of palm approx"
-        const palm = landmarks[9];
-        setPalmPos([
-          (palm.x - 0.5) * 2, // normalizado a espacio 3D
-          (0.5 - palm.y) * 2,
-          -0.5,
-        ]);
+      // Limpiar canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dibujar video
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+      // Dibujar puntos de la mano
+      if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+          landmarks.forEach((point) => {
+            ctx.beginPath();
+            ctx.arc(
+              point.x * canvas.width,
+              point.y * canvas.height,
+              5,
+              0,
+              2 * Math.PI
+            );
+            ctx.fillStyle = "red";
+            ctx.fill();
+          });
+        }
       }
     });
 
@@ -53,7 +63,8 @@ export default function App() {
       });
       camera.start();
     } catch (err) {
-      console.error("Error al iniciar cámara", err);
+      setError("Error al iniciar la cámara");
+      console.error(err);
     }
 
     return () => {
@@ -62,17 +73,16 @@ export default function App() {
   }, []);
 
   return (
-    <div className="w-full h-screen flex">
-      {/* Cámara oculta */}
-      <video ref={videoRef} className="hidden" />
-
-      {/* Escena 3D */}
-      <Canvas camera={{ position: [0, 0, 3] }}>
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[5, 5, 5]} />
-        <CocaColaModel position={palmPos} />
-        <OrbitControls />
-      </Canvas>
+    <div>
+      <h1>Detección de mano en React</h1>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <video ref={videoRef} className="hidden" /> {/* video oculto */}
+      <canvas
+        ref={canvasRef}
+        width={640}
+        height={480}
+        className="rounded-lg shadow-lg"
+      />
     </div>
   );
 }
