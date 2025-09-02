@@ -1,4 +1,4 @@
-import Video from '../src/components/Cam.jsx';
+import Video from "../src/components/Cam";
 
 function App() {
   return (
