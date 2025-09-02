@@ -1,32 +1,46 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import * as THREE from "three";
-
-function Model({ position }) {
-  const modelRef = useRef();
-
-  useEffect(() => {
-    const loader = new GLTFLoader();
-    loader.load("/figure.glb", (gltf) => {
-      modelRef.current.add(gltf.scene);
-    });
-  }, []);
-
-  return <group ref={modelRef} position={position} scale={[0.5, 0.5, 0.5]} />;
-}
 
 export default function Cam() {
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [handPosition, setHandPosition] = useState(null);
+  const containerRef = useRef(null);
+  const cubeRef = useRef(null);
 
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !containerRef.current) return;
 
+    // ---- Configuración Three.js ----
+    const scene = new THREE.Scene();
+    const camera3D = new THREE.PerspectiveCamera(
+      75,
+      640 / 480,
+      0.1,
+      1000
+    );
+    const renderer = new THREE.WebGLRenderer({ alpha: true });
+    renderer.setSize(640, 480);
+    containerRef.current.appendChild(renderer.domElement);
+
+    // Cubo (figura 3D)
+    const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    const material = new THREE.MeshNormalMaterial();
+    const cube = new THREE.Mesh(geometry, material);
+    cube.visible = false; // Oculto por defecto
+    scene.add(cube);
+    cubeRef.current = cube;
+
+    camera3D.position.z = 1.5;
+
+    // Render loop
+    const animate = () => {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera3D);
+    };
+    animate();
+
+    // ---- Configuración Mediapipe ----
     const hands = new Hands({
       locateFile: (file) =>
         `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
@@ -40,53 +54,53 @@ export default function Cam() {
     });
 
     hands.onResults((results) => {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      if (
+        results.multiHandLandmarks &&
+        results.multiHandLandmarks.length > 0
+      ) {
         const landmarks = results.multiHandLandmarks[0];
-        const palm = landmarks[9]; // centro de la palma
 
-        // convertir coords a espacio -1..1 para la escena 3D
-        const x = (palm.x - 0.5) * 2;
+        // Landmark 9 = centro de la palma
+        const palm = landmarks[9];
+
+        // Normalizamos coordenadas de la cámara a espacio 3D
+        const x = (palm.x - 0.5) * 2; // de -1 a 1
         const y = -(palm.y - 0.5) * 2;
+        const z = palm.z;
 
-        setHandPosition([x, y, -2]); // -2 para que quede frente a la cámara 3D
+        cube.position.set(x, y, z);
+        cube.visible = true;
       } else {
-        setHandPosition(null); // no hay mano → ocultar
+        cube.visible = false;
       }
     });
 
-    const camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        await hands.send({ image: videoRef.current });
-      },
-      width: 640,
-      height: 480,
-    });
-    camera.start();
+    // ---- Cámara ----
+    let cameraMediapipe = null;
+    try {
+      cameraMediapipe = new Camera(videoRef.current, {
+        onFrame: async () => {
+          await hands.send({ image: videoRef.current });
+        },
+        width: 640,
+        height: 480,
+      });
+      cameraMediapipe.start();
+    } catch (err) {
+      console.error("Error iniciando cámara:", err);
+    }
 
-    return () => camera.stop();
+    return () => {
+      if (cameraMediapipe) cameraMediapipe.stop();
+      renderer.dispose();
+    };
   }, []);
 
   return (
-    <div className="flex flex-col items-center">
-      <h1>Detección de Mano con Figura 3D</h1>
+    <div>
+      <h1>Detección de mano con figura 3D</h1>
       <video ref={videoRef} className="hidden" />
-      <canvas ref={canvasRef} width={640} height={480} />
-
-      {/* Escena 3D */}
-      <Canvas style={{ width: 640, height: 480 }}>
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[2, 2, 5]} />
-        <OrbitControls />
-
-        {/* Mostrar modelo solo si hay mano */}
-        {handPosition && <Model position={handPosition} />}
-      </Canvas>
+      <div ref={containerRef} />
     </div>
   );
 }
