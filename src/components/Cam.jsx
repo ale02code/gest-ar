@@ -5,6 +5,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
+// Modelo 3D
 function Model({ targetPos, targetQuat, targetScale }) {
   const ref = useRef();
   const currentPos = useRef(new THREE.Vector3());
@@ -14,20 +15,15 @@ function Model({ targetPos, targetQuat, targetScale }) {
   useFrame(() => {
     if (!ref.current || !targetPos || !targetQuat) return;
 
-    // Suavizado posición
+    // Posición suavizada
     currentPos.current.lerp(targetPos, 0.2);
     ref.current.position.copy(currentPos.current);
 
-    // Suavizado rotación
-    THREE.Quaternion.slerp(
-      currentQuat.current,
-      targetQuat,
-      currentQuat.current,
-      0.2
-    );
+    // Rotación suavizada
+    THREE.Quaternion.slerp(currentQuat.current, targetQuat, currentQuat.current, 0.2);
     ref.current.quaternion.copy(currentQuat.current);
 
-    // Suavizado escala
+    // Escala suavizada
     currentScale.current.lerp(targetScale, 0.2);
     ref.current.scale.copy(currentScale.current);
   });
@@ -40,9 +36,7 @@ export default function Cam() {
   const videoRef = useRef(null);
   const [targetPos, setTargetPos] = useState(null);
   const [targetQuat, setTargetQuat] = useState(null);
-  const [targetScale, setTargetScale] = useState(
-    new THREE.Vector3(0.3, 0.3, 0.3)
-  );
+  const [targetScale, setTargetScale] = useState(new THREE.Vector3(0.3, 0.3, 0.3));
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -60,10 +54,7 @@ export default function Cam() {
     });
 
     hands.onResults((results) => {
-      if (
-        !results.multiHandLandmarks ||
-        results.multiHandLandmarks.length === 0
-      ) {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
         setTargetPos(null);
         setTargetQuat(null);
         return;
@@ -71,22 +62,25 @@ export default function Cam() {
 
       const lms = results.multiHandLandmarks[0];
 
-      // ---------- POSICIÓN PALMA ----------
+      // ---------- CENTRO DE LA PALMA ----------
       const palmIndices = [0, 1, 5, 9, 13, 17];
-      let sumX = 0,
-        sumY = 0,
-        sumZ = 0;
-      palmIndices.forEach((i) => {
+      let sumX = 0, sumY = 0, sumZ = 0;
+      palmIndices.forEach(i => {
         sumX += lms[i].x;
         sumY += lms[i].y;
         sumZ += lms[i].z;
       });
-      const cx = (sumX / palmIndices.length - 0.5) * 4;
-      const cy = -(sumY / palmIndices.length - 0.5) * 3;
-      const cz = (sumZ / palmIndices.length) * 2;
+      const avgX = sumX / palmIndices.length;
+      const avgY = sumY / palmIndices.length;
+      const avgZ = sumZ / palmIndices.length;
+
+      // Convertimos a coordenadas Three.js
+      const cx = (avgX - 0.5) * 4;
+      const cy = -(avgY - 0.5) * 3;
+      const cz = -avgZ * 2;
       setTargetPos(new THREE.Vector3(cx, cy, cz));
 
-      // ---------- ROTACIÓN PALMA ----------
+      // ---------- ORIENTACIÓN PALMA ----------
       const p0 = new THREE.Vector3(lms[0].x, lms[0].y, lms[0].z);
       const p5 = new THREE.Vector3(lms[5].x, lms[5].y, lms[5].z);
       const p17 = new THREE.Vector3(lms[17].x, lms[17].y, lms[17].z);
@@ -100,10 +94,7 @@ export default function Cam() {
       setTargetQuat(quat);
 
       // ---------- ESCALADO DINÁMICO ----------
-      // Tomamos la distancia promedio de la palma a la cámara (z)
-      const avgZ = sumZ / palmIndices.length;
-      // Ajustamos escala según distancia (más cerca = más grande)
-      const scaleFactor = THREE.MathUtils.clamp(0.3 / (avgZ + 0.5), 0.1, 1);
+      const scaleFactor = THREE.MathUtils.clamp(0.3 / (Math.abs(avgZ) + 0.5), 0.1, 1);
       setTargetScale(new THREE.Vector3(scaleFactor, scaleFactor, scaleFactor));
     });
 
