@@ -1,12 +1,17 @@
-import React, { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, useGLTF } from "@react-three/drei";
+
+function Model({ position }) {
+  const { scene } = useGLTF("/figure.glb"); // cargamos desde public
+  return <primitive object={scene} position={position} scale={0.3} />;
+}
 
 export default function Cam() {
   const videoRef = useRef(null);
-  const [palmPos, setPalmPos] = useState(null); // posición de la palma
+  const [palmPos, setPalmPos] = useState(null);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -26,23 +31,19 @@ export default function Cam() {
     hands.onResults((results) => {
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
-
-        // Landmark de la palma (aprox: punto 0 = wrist o 9 = centro palma)
-        const palm = landmarks[9]; // eje X, Y en rango [0,1]
+        const palm = landmarks[9];
         setPalmPos({
-          x: (palm.x - 0.5) * 4, // escalamos para la escena 3D
+          x: (palm.x - 0.5) * 4,
           y: -(palm.y - 0.5) * 3,
           z: palm.z * 2,
         });
       } else {
-        setPalmPos(null); // si no hay mano, quitamos el objeto
+        setPalmPos(null);
       }
     });
 
     let camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        await hands.send({ image: videoRef.current });
-      },
+      onFrame: async () => await hands.send({ image: videoRef.current }),
       width: 640,
       height: 480,
     });
@@ -53,7 +54,6 @@ export default function Cam() {
 
   return (
     <div style={{ position: "relative", width: 640, height: 480 }}>
-      {/* video en vivo */}
       <video
         ref={videoRef}
         autoPlay
@@ -64,7 +64,6 @@ export default function Cam() {
         style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}
       />
 
-      {/* Canvas 3D encima */}
       <Canvas
         style={{
           position: "absolute",
@@ -75,15 +74,9 @@ export default function Cam() {
         }}
         camera={{ position: [0, 0, 5] }}
       >
-        <ambientLight />
+        <ambientLight intensity={1} />
         <OrbitControls />
-
-        {palmPos && (
-          <mesh position={[palmPos.x, palmPos.y, palmPos.z]}>
-            <boxGeometry args={[0.2, 0.2, 0.2]} />
-            <meshStandardMaterial color="red" />
-          </mesh>
-        )}
+        {palmPos && <Model position={[palmPos.x, palmPos.y, palmPos.z]} />}
       </Canvas>
     </div>
   );
